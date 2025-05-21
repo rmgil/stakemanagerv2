@@ -75,6 +75,12 @@ const TournamentTable: React.FC<TournamentTableProps> = ({ tournaments, onExport
                   Buy-in
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Re-entries
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  Buy-in Total
+                </th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                   Resultado
                 </th>
                 <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -105,6 +111,12 @@ const TournamentTable: React.FC<TournamentTableProps> = ({ tournaments, onExport
                         (${tournament.buyIn.toFixed(2)})
                       </span>
                     )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    {tournament.reEntries || 0}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    ${(tournament.totalBuyIn || (tournament.buyIn * (tournament.totalEntries || 1))).toFixed(2)}
                   </td>
                   <td className={`px-6 py-4 whitespace-nowrap text-sm font-medium ${
                     tournament.result >= 0 ? 'text-success-500' : 'text-danger-500'
