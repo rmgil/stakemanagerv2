@@ -1,0 +1,13 @@
+GGPoker Tournament Summary
+Tournament #123456789 $10 + $1 No Limit Hold'em
+Buy-in: $10 + $1
+Players: 150
+Prize Pool: $1,500
+Rebuy: No
+Addon: No
+Start Time: 2025-05-20 15:30 ET
+End Time: 2025-05-20 18:45 ET
+
+You finished in 12th place and won: $50.25
+Buy-in: -$11.00
+Net Result: $39.25

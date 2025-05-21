@@ -1,0 +1,13 @@
+GGPoker Tournament Summary
+Tournament #12345678 PHASE #1 - Sunday Million $100 + $10 No Limit Hold'em
+Buy-in: $100 + $10
+Phase Tournament: Yes (Day 1)
+Players: 325
+Rebuy: No
+Addon: No
+Start Time: 2025-05-19 12:00 ET
+End Time: 2025-05-19 18:30 ET
+
+You advanced to Day 2 with 250,000 chips (Average: 125,000)
+Buy-in: -$110.00
+Net Result: -$110.00
