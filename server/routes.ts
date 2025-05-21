@@ -210,7 +210,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       try {
         if (token) {
           // Submit to Polarize API
-          polarizeSessionId = await submitSessionResults(token, summary, tournaments);
+          // Need to convert Tournament to TournamentResult format
+          const tournamentResults: TournamentResult[] = tournaments.map(t => ({
+            name: t.name,
+            category: t.category,
+            buyIn: t.buyIn,
+            result: t.result,
+            normalDeal: t.normalDeal,
+            automaticSale: t.automaticSale,
+            currencyCode: t.currencyCode || 'USD',
+            conversionRate: t.conversionRate || 1,
+            tournamentId: t.tournamentId || undefined,
+            buyInOriginal: t.buyInOriginal || undefined,
+            originalFilename: t.originalFilename || undefined
+          }));
+          polarizeSessionId = await submitSessionResults(token, summary, tournamentResults);
         } else {
           // For development, mock a session ID
           polarizeSessionId = `polarize-${uuidv4().slice(0, 8)}`;
@@ -252,8 +266,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(404).json({ message: "No tournaments found for this session" });
       }
       
+      // Convert to the expected format for CSV generation
+      const tournamentResults: TournamentResult[] = tournaments.map(t => ({
+        name: t.name,
+        category: t.category,
+        buyIn: t.buyIn,
+        result: t.result,
+        normalDeal: t.normalDeal,
+        automaticSale: t.automaticSale,
+        currencyCode: t.currencyCode || 'USD',
+        conversionRate: t.conversionRate || 1,
+        tournamentId: t.tournamentId || undefined,
+        buyInOriginal: t.buyInOriginal || undefined,
+        originalFilename: t.originalFilename || undefined
+      }));
+      
       // Generate CSV content
-      const csvContent = generateCsv(tournaments);
+      const csvContent = generateCsv(tournamentResults);
       
       // Set headers for CSV download
       res.setHeader('Content-Type', 'text/csv');

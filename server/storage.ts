@@ -73,7 +73,8 @@ export class MemStorage implements IStorage {
       tournamentId: tournament.tournamentId || null,
       buyInOriginal: tournament.buyInOriginal || null,
       currencyCode: tournament.currencyCode || 'USD',
-      conversionRate: tournament.conversionRate || 1
+      conversionRate: tournament.conversionRate || 1,
+      originalFilename: tournament.originalFilename || null
     };
     
     this.tournaments.set(id, newTournament);
