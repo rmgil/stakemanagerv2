@@ -43,15 +43,20 @@ export function calculateSingleTournamentDistribution(
                 ? playerLevel.phaseLimit
                 : playerLevel.normalLimit;
   
+  // Calculate total buy-in, considering re-entries
+  const rawBuyInUsd = Math.abs(tournament.buyIn);
+  const totalBuyInUsd = tournament.totalBuyIn || (rawBuyInUsd * (tournament.totalEntries || 1));
+  
   // Handle special cases
   if (tournament.category === TournamentCategory.PHASE_DAY_1) {
     // Phase Day 1 always counts as loss
+    // For Phase Day 1, each entry counts as a loss
     return {
       normalDeal: -limit / 2, // 50% of limit
-      automaticSale: tournament.result + (limit / 2) // Remaining loss
+      automaticSale: -totalBuyInUsd + (limit / 2) // Remaining loss
     };
   } else if (tournament.category === TournamentCategory.PHASE_DAY_2_PLUS) {
-    // Phase Day 2+ has logical buy-in of 0
+    // Phase Day 2+ has logical buy-in of 0 (re-entries ignored)
     if (tournament.result > 0) {
       // 50/50 split for profit
       return {
@@ -68,10 +73,10 @@ export function calculateSingleTournamentDistribution(
     // Regular tournament
     if (tournament.result > 0) {
       // For winnings, split 50/50 up to the limit, rest goes to automatic sale
-      const totalBuyIn = Math.abs(tournament.buyIn);
+      // Use total buy-in with re-entries for calculation
       const profit = tournament.result;
       
-      if (totalBuyIn <= limit) {
+      if (totalBuyInUsd <= limit) {
         // If buy-in is less than or equal to limit
         return {
           normalDeal: profit / 2,
@@ -93,14 +98,14 @@ export function calculateSingleTournamentDistribution(
       // For losses
       const loss = Math.abs(tournament.result);
       
-      if (tournament.buyIn <= limit) {
-        // If buy-in is less than or equal to limit, split 50/50
+      if (totalBuyInUsd <= limit) {
+        // If total buy-in is less than or equal to limit, split 50/50
         return {
           normalDeal: -tournament.result / 2,
           automaticSale: -tournament.result / 2
         };
       } else {
-        // If buy-in exceeds limit
+        // If total buy-in exceeds limit
         // Limit portion is split 50/50
         const normalDealAmount = -limit / 2;
         // Rest is automatic sale
