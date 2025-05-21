@@ -8,17 +8,18 @@ import { TournamentResult, TournamentCategory, TournamentCategoryType } from "@s
  */
 export function parseTournamentSummary(fileContent: string, filename: string): TournamentResult | null {
   try {
-    // Extract tournament name and ID
-    // Format: Tournament #123456789, Name of Tournament, Hold'em No Limit
-    const headerMatch = fileContent.match(/Tournament #(\d+), (.+?), Hold'em/);
+    // Extract tournament name and ID with more flexible pattern
+    // Various formats: "Tournament #123456, Name, Hold'em" or similar variants
+    const headerMatch = fileContent.match(/Tournament #(\d+)[,:]?\s*([^,]+(?:,\s*[^,]+)*?)(?:,\s*Hold'em|$)/i);
     if (!headerMatch) return null;
     
     const tournamentId = headerMatch[1];
     const name = headerMatch[2].trim();
     
-    // Extract buy-in
-    // Format common in GGPoker: Buy-in: $XX.X+$XX.X
-    const buyInMatch = fileContent.match(/Buy-in: ([¥$€])?([\d.]+)\+([¥$€])?([\d.]+)/);
+    // Extract buy-in with flexible pattern for various formats and currencies
+    // Matches: "$50.6+$4.4", "€50+€5", "$25.6+$4.4+$25" (bounty), etc.
+    const buyInPattern = /Buy-in:\s*([¥$€£₩₽₹])?(\d+[.,]?\d*)(?:\+([¥$€£₩₽₹])?(\d+[.,]?\d*))?(?:\+([¥$€£₩₽₹])?(\d+[.,]?\d*))?/i;
+    const buyInMatch = fileContent.match(buyInPattern);
     if (!buyInMatch) return null;
     
     // Determine currency and buy-in values
@@ -27,62 +28,197 @@ export function parseTournamentSummary(fileContent: string, filename: string): T
     let buyInOriginal = "";
     let conversionRate = 1;
     
-    // Get the currency symbol (if any) and the buy-in amount
-    const currencySymbol = buyInMatch[1] || buyInMatch[3] || "$";
-    if (currencySymbol && currencySymbol !== "$") {
-      currencyCode = currencySymbol;
-    }
+    // Get the currency symbol, defaulting to $
+    // First check main buy-in, then fee, then possible bounty
+    const currencySymbol = buyInMatch[1] || buyInMatch[3] || buyInMatch[5] || "$";
     
-    // Calculate total buy-in (main + fee)
-    const mainBuyIn = parseFloat(buyInMatch[2]);
-    const fee = parseFloat(buyInMatch[4]);
-    buyInValue = mainBuyIn + fee;
+    // Map currency symbols to codes
+    const currencyMap: Record<string, string> = {
+      "$": "USD",
+      "€": "EUR",
+      "£": "GBP",
+      "¥": "CNY",
+      "₩": "KRW",
+      "₽": "RUB",
+      "₹": "INR"
+    };
+    
+    currencyCode = currencyMap[currencySymbol] || currencySymbol;
+    
+    // Parse all numbers, handling different decimal separators (. or ,)
+    const parseAmount = (str?: string): number => {
+      if (!str) return 0;
+      return parseFloat(str.replace(',', '.'));
+    };
+    
+    // Calculate total buy-in (main + fee + optional bounty)
+    const mainBuyIn = parseAmount(buyInMatch[2]);
+    const fee = parseAmount(buyInMatch[4]);
+    const bounty = parseAmount(buyInMatch[6]); // May be 0 if no bounty
+    
+    buyInValue = mainBuyIn + fee + bounty;
     
     if (currencyCode !== "USD") {
       buyInOriginal = `${currencyCode}${buyInValue}`;
     }
     
-    // Extract re-entries information
-    const reEntriesMatch = fileContent.match(/You made (\d+) re-entr[yi]es/);
-    const reEntries = reEntriesMatch ? parseInt(reEntriesMatch[1], 10) : 0;
+    // Extract re-entries information with more flexible pattern
+    // Look for various phrasings across different poker platforms
+    const reEntriesPatterns = [
+      /You made (\d+) re-entr[yi]es/i,
+      /(\d+) re-entr[yi]es/i,
+      /re-entered (\d+) times/i,
+      /(\d+) times re-entered/i
+    ];
+    
+    let reEntries = 0;
+    for (const pattern of reEntriesPatterns) {
+      const match = fileContent.match(pattern);
+      if (match) {
+        reEntries = parseInt(match[1], 10);
+        break;
+      }
+    }
+    
     const totalEntries = reEntries + 1;
     const totalBuyIn = buyInValue * totalEntries;
     
-    // Extract result from GGPoker tournaments format
-    // Pattern: You received a total of $XX.XX or similar
-    const receivedMatch = fileContent.match(/received a total of ([¥$€])([\d,.]+)/);
-    // For Day 1 tournaments, detect if player advanced to Day 2
-    const advancedToDayMatch = fileContent.match(/advanced to Day2/i);
+    // Extract result with flexible patterns for different formats
+    // Look for money amounts in various contexts
+    const resultPatterns = [
+      // Direct result statements: "You received a total of $XX.XX"
+      new RegExp(`received a total of ([¥$€£₩₽₹]?)(\\d+[.,]?\\d*)`, 'i'),
+      // Position and amount: "5th : Hero, $123.45"
+      new RegExp(`\\d+[a-z]*\\s*(?::|place|position)[^,]*,\\s*([¥$€£₩₽₹]?)(\\d+[.,]?\\d*)`, 'i'),
+      // Direct winnings: "You won $123.45"
+      new RegExp(`won\\s*([¥$€£₩₽₹]?)(\\d+[.,]?\\d*)`, 'i')
+    ];
+    
+    // For Day 1 tournaments
+    const advancedPatterns = [
+      /advanced to Day[- ]?2/i,
+      /qualified (?:for|to) Day[- ]?2/i,
+      /(?:qualified|advanced) with .* chips/i
+    ];
     
     let result = 0;
+    let resultFound = false;
     
-    if (receivedMatch) {
-      // If winnings received
-      const amountStr = receivedMatch[2].replace(/,/g, '');
-      result = parseFloat(amountStr);
-    } else if (advancedToDayMatch) {
-      // Day 1 tournament with advancement - full buy-in is the loss
-      result = -buyInValue;
-    } else {
-      // Default case, no explicit result mentioned
-      result = -buyInValue;
+    // Check result patterns
+    for (const pattern of resultPatterns) {
+      const match = fileContent.match(pattern);
+      if (match) {
+        // If winnings received
+        const amountStr = match[2].replace(/,/g, '.');
+        result = parseAmount(amountStr);
+        resultFound = true;
+        break;
+      }
     }
     
-    // Determine tournament category
+    // If no result found, check advancement patterns
+    if (!resultFound) {
+      let advanced = false;
+      for (const pattern of advancedPatterns) {
+        if (fileContent.match(pattern)) {
+          advanced = true;
+          break;
+        }
+      }
+      
+      if (advanced) {
+        // Day 1 tournament with advancement - full buy-in is the loss
+        result = -buyInValue * totalEntries;
+      } else {
+        // Default case, no explicit result mentioned
+        result = -buyInValue * totalEntries;
+      }
+    }
+    
+    // Determine tournament category with flexible pattern matching
     let category: TournamentCategoryType;
     
-    // Check if it's a phase tournament (Day 1, Day 2+)
-    if (name.includes("[Day 1]") || name.toLowerCase().includes("phase") && name.includes("Day 1")) {
+    // More comprehensive patterns for phase tournaments
+    const phaseDay1Patterns = [
+      /\[Day 1\]/i,
+      /Day 1/i,
+      /Phase.*Day ?1/i,
+      /Phase.*\#1/i,
+      /Phase 1/i,
+      /Phase-\w+.*Day ?1/i
+    ];
+    
+    const phaseDay2PlusPatterns = [
+      /\[Day 2\]/i,
+      /\[Day 3\]/i,
+      /Day 2\+?/i,
+      /Day 3\+?/i,
+      /Phase.*Day ?2/i,
+      /Phase.*Day ?3/i,
+      /Phase.*\#2/i,
+      /Phase.*\#3/i,
+      /Phase 2/i,
+      /Phase 3/i,
+      /Phase-\w+.*Day ?[23]/i,
+      /Final Day/i
+    ];
+    
+    // Check all patterns
+    let isPhaseDay1 = false;
+    let isPhaseDay2Plus = false;
+    
+    // Check if any Phase Day 1 pattern matches
+    for (const pattern of phaseDay1Patterns) {
+      if (pattern.test(name)) {
+        isPhaseDay1 = true;
+        break;
+      }
+    }
+    
+    // Check if any Phase Day 2+ pattern matches
+    if (!isPhaseDay1) {
+      for (const pattern of phaseDay2PlusPatterns) {
+        if (pattern.test(name)) {
+          isPhaseDay2Plus = true;
+          break;
+        }
+      }
+    }
+    
+    // Additional file content checks to detect phase tournaments
+    if (!isPhaseDay1 && !isPhaseDay2Plus) {
+      // Check content for advancement indicators
+      for (const pattern of advancedPatterns) {
+        if (pattern.test(fileContent)) {
+          isPhaseDay1 = true;
+          break;
+        }
+      }
+      
+      // Check for Day 2 indicators in content
+      if (!isPhaseDay1 && fileContent.match(/Day ?2.*tournament/i)) {
+        isPhaseDay2Plus = true;
+      }
+    }
+    
+    // Assign category based on results
+    if (isPhaseDay1) {
       category = TournamentCategory.PHASE_DAY_1;
-    } else if (name.includes("[Day 2]") || name.includes("[Day 3]") || 
-              (name.toLowerCase().includes("phase") && (name.includes("Day 2") || name.includes("Day 3")))) {
+      
+      // Always count as a loss for Day 1 tournaments
+      result = -buyInValue * totalEntries;
+    } else if (isPhaseDay2Plus) {
       category = TournamentCategory.PHASE_DAY_2_PLUS;
-      // Phase Day 2+ has logical buy-in of 0
-      if (result > 0) {
-        // Keep the result as positive
-      } else {
-        // Handle case where player didn't win but was in Day 2+
-        // In this case, result is still 0 (no buy-in) + any winnings
+      
+      // Phase Day 2+ has logical buy-in of 0, keeping whatever result we parsed
+      // If no winnings detected, set to 0 (no buy-in)
+      if (!resultFound) {
+        result = 0;
+      }
+      
+      // If result is negative, assume 0 since Day 2+ has no buy-in cost
+      if (result < 0) {
+        result = 0;
       }
     } else if (currencyCode !== "USD") {
       category = TournamentCategory.OTHER_CURRENCY;
@@ -94,6 +230,7 @@ export function parseTournamentSummary(fileContent: string, filename: string): T
     const normalDeal = 0;
     const automaticSale = 0;
     
+    // Store final parsed result in standardized format
     return {
       name,
       tournamentId,
