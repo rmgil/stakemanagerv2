@@ -30,18 +30,28 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <p className="text-sm text-gray-500">Torneios Processados</p>
-                <p className="text-2xl font-semibold text-gray-900">{summary.totalTournaments}</p>
+                <p className="text-2xl font-semibold text-gray-900">
+                  {/* Total de torneios + re-entries */}
+                  {tournaments.reduce((total, t) => total + (t.totalEntries || 1), 0)}
+                </p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">Resultado Líquido</p>
-                <p className={`text-2xl font-semibold ${
-                  summary.netProfit >= 0 ? 'text-green-500' : 'text-red-500'
-                }`}>
-                  ${summary.netProfit.toFixed(2)}
+                <p className="text-sm text-gray-500">Investimento Total</p>
+                <p className="text-2xl font-semibold text-blue-600">
+                  {/* Soma de todos os buy-ins, incluindo re-entries */}
+                  ${tournaments.reduce((total, t) => total + (t.totalBuyIn || t.buyIn), 0).toFixed(2)}
                 </p>
               </div>
             </div>
+            
+            {/* Novo campo para Balanço Final */}
             <div className="mt-4 border-t border-gray-200 pt-4">
+              <div className="flex justify-between text-sm mb-2">
+                <span className="text-gray-500">Balanço Final:</span>
+                <span className={`font-medium ${summary.netProfit >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                  ${summary.netProfit.toFixed(2)}
+                </span>
+              </div>
               <div className="flex justify-between text-sm mb-2">
                 <span className="text-gray-500">Deal Normal (50/50):</span>
                 <span className="font-medium text-gray-900">${summary.normalDeal.toFixed(2)}</span>
