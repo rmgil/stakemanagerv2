@@ -306,13 +306,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const batches = await storage.getUploadBatchesByUserId(userId);
       
       // Format for the response
-      const historyItems = batches.map(batch => ({
-        id: batch.id,
-        date: new Date(batch.createdAt).toLocaleString(),
-        totalTournaments: batch.totalTournaments,
-        netProfit: batch.netProfit,
-        submittedToPolarize: batch.submittedToPolarize
-      }));
+      const historyItems = batches.map(batch => {
+        // Lidar com o caso onde createdAt pode ser null
+        const dateString = batch.createdAt instanceof Date 
+          ? batch.createdAt.toLocaleString() 
+          : (typeof batch.createdAt === 'string' ? new Date(batch.createdAt).toLocaleString() : new Date().toLocaleString());
+        
+        return {
+          id: batch.id,
+          date: dateString,
+          totalTournaments: batch.totalTournaments,
+          netProfit: batch.netProfit,
+          submittedToPolarize: batch.submittedToPolarize
+        };
+      });
       
       res.json(historyItems);
     } catch (error) {
