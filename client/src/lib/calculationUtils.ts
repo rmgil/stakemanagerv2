@@ -33,10 +33,16 @@ export function calculateTournamentDistributions(
  * @param playerLevel Player level data
  * @returns Calculated normal deal and automatic sale amounts
  */
+/**
+ * Calcula a distribuição financeira para um torneio com base no nível do jogador
+ * @param tournament Dados do torneio
+ * @param playerLevel Nível do jogador
+ * @returns Valores calculados para normal deal e automatic sale
+ */
 export function calculateSingleTournamentDistribution(
   tournament: TournamentResult,
   playerLevel: PlayerLevel
-): { normalDeal: number; automaticSale: number } {
+): { normalDeal: number; automaticSale: number; conversionPending?: boolean } {
   // 1. Obter os caps aplicáveis baseados no nível do jogador
   const normalCap = playerLevel.normalLimit;  // ex: 22 USD para torneios normais
   const phaseCap = playerLevel.phaseLimit;    // ex: 11 USD para torneios Phase
@@ -45,80 +51,94 @@ export function calculateSingleTournamentDistribution(
   const singleBuyIn = Math.abs(tournament.buyIn);
   const totalBuyIn = tournament.totalBuyIn || (singleBuyIn * (tournament.totalEntries || 1));
   
-  // 3. Obter cap apropriado e calcular percentagens de distribuição
-  // Regra: polarize_pct = max(0, (buyin_usd - cap) / buyin_usd)
+  // 3. Definir cap apropriado conforme a categoria do torneio
   let cap: number;
   
   if (tournament.category === TournamentCategory.PHASE_DAY_1 || 
       tournament.category === TournamentCategory.PHASE_DAY_2_PLUS) {
-    cap = phaseCap;  // Usa cap_phase para torneios Phase
+    cap = phaseCap;  // Usa cap_phase (11 USD) para torneios Phase
   } else {
-    cap = normalCap;  // Usa cap_normal para outros torneios
+    cap = normalCap;  // Usa cap_normal (22 USD) para outros torneios
   }
   
-  // Calcular percentagens de distribuição com base no buy-in individual (não o total)
+  // 4. Calcular percentagens exatas de distribuição
+  // Regra: polarize_pct = max(0, (buyin_usd - cap) / buyin_usd)
   const polarizePct = Math.max(0, (singleBuyIn - cap) / singleBuyIn);
   const normalPct = 1 - polarizePct;
   
-  // 4. Processamento por categoria
+  // 5. Verificar moeda diferente e conversão pendente
+  if (tournament.currencyCode !== 'USD' && tournament.conversionRate <= 0) {
+    // Caso 5: Outras moedas sem conversão definida
+    return {
+      normalDeal: 0,
+      automaticSale: 0,
+      conversionPending: true
+    };
+  }
+  
+  // 6. Processamento por categoria com base nas regras específicas
   if (tournament.category === TournamentCategory.PHASE_DAY_1) {
-    // Caso 2: Phase Day 1
-    // - Sempre trata o buy-in total como prejuízo
+    // Caso A: Phase Day 1
+    // - Sempre trata o buy-in total como prejuízo (resultado = -buyIn)
+    // - Usa cap_phase (11 USD) para calcular percentagens
     // - lucro_normal = (-totalBuyIn) * normal_pct
     // - lucro_polar = (-totalBuyIn) * polarize_pct
+    
+    // Exemplo: Phase Day 1 (55 USD, cap 11)
+    // - polarizePct = (55-11)/55 = 0.8
+    // - normalPct = 0.2
+    // - normalDeal = -55 * 0.2 = -11
+    // - automaticSale = -55 * 0.8 = -44
+    
     return {
       normalDeal: -totalBuyIn * normalPct,
       automaticSale: -totalBuyIn * polarizePct
     };
   } 
   else if (tournament.category === TournamentCategory.PHASE_DAY_2_PLUS) {
-    // Caso 3: Phase Day 2+
-    // - Buy-in lógico = 0 (resultado = prize sem deduzir buy-in)
-    // - O buy-in real continua a definir as percentagens
+    // Caso B: Phase Day 2+
+    // - Buy-in lógico = 0 (resultado = prize, não deduz buy-in)
+    // - O buy-in real continua definindo as percentagens
     // - lucro_normal = prize_usd * normal_pct
     // - lucro_polar = prize_usd * polarize_pct
+    
+    // Exemplo: Phase Day 2+ (55 USD, prize 113.44, cap 11)
+    // - polarizePct = (55-11)/55 = 0.8
+    // - normalPct = 0.2
+    // - normalDeal = 113.44 * 0.2 = 22.69
+    // - automaticSale = 113.44 * 0.8 = 90.75
+    
     return {
       normalDeal: tournament.result * normalPct,
       automaticSale: tournament.result * polarizePct
     };
   } 
-  else if (tournament.currencyCode !== 'USD' && tournament.conversionRate <= 0) {
-    // Caso 5: Outras moedas sem conversão definida
-    // Quando conversão pendente, retorna valores zerados
-    return {
-      normalDeal: 0,
-      automaticSale: 0
-    };
-  } 
   else {
-    // Casos 1 e 4: Torneios regulares (incluindo com re-entries)
+    // Casos C e D: Torneios regulares (incluindo com re-entries)
     // - resultado = prize - totalBuyIn
-    // - lucro_normal = resultado * normal_pct + totalBuyIn
+    // - lucro_normal = resultado * normal_pct
     // - lucro_polar = resultado * polarize_pct
-
-    // Caso D: Normal re-entry (Big 20 com 3 re-entries)
-    // - Como buy-in = 20 < cap (22), 100% normal deal
-    // - 20 $ x 4 = 80 $ custo total
-    // - 32.7 - 80 = -47.3 $ perda
-    // - -47.3 $ x 100% = -47.3 $ normal deal, 0 $ polarize
     
-    const profit = tournament.result - totalBuyIn;
+    // Exemplo C: Normal (55 USD, prize 18.75, cap 22)
+    // - polarizePct = (55-22)/55 = 0.6
+    // - normalPct = 0.4
+    // - resultado = 18.75 - 55 = -36.25
+    // - normalDeal = -36.25 * 0.4 = -14.5
+    // - automaticSale = -36.25 * 0.6 = -21.75
     
-    if (profit >= 0) {
-      // Lucro
-      return {
-        normalDeal: profit * normalPct + totalBuyIn,
-        automaticSale: profit * polarizePct
-      };
-    } else {
-      // Perda - distribuir conforme percentagens
-      // Se buy-in ≤ cap, tudo vai para normal deal
-      // Caso contrário, distribui proporcionalmente
-      return {
-        normalDeal: profit * normalPct + totalBuyIn,
-        automaticSale: profit * polarizePct
-      };
-    }
+    // Exemplo D: Normal re-entry (20 USD, prize 32.7, 3 re-entries, cap 22)
+    // - Como buy-in (20) < cap (22), normalPct = 1.0, polarizePct = 0.0
+    // - totalBuyIn = 20 * 4 = 80
+    // - resultado = 32.7 - 80 = -47.3
+    // - normalDeal = -47.3 * 1.0 = -47.3
+    // - automaticSale = -47.3 * 0.0 = 0
+    
+    const resultado = tournament.result - totalBuyIn;
+    
+    return {
+      normalDeal: resultado * normalPct,
+      automaticSale: resultado * polarizePct
+    };
   }
 }
 

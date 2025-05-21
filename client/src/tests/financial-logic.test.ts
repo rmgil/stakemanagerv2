@@ -32,9 +32,16 @@ describe('Financial Logic Tests', () => {
 
     const result = calculateSingleTournamentDistribution(tournament, TEST_PLAYER_LEVEL);
 
+    // Verifica percentagens
+    const expectedNormalPct = 0.2;  // (55-11)/55 = 0.8 → 1-0.8 = 0.2
+    const expectedPolarizePct = 0.8;
+    const normalPct = 1 - Math.max(0, (tournament.buyIn - TEST_PLAYER_LEVEL.phaseLimit) / tournament.buyIn);
+    expect(normalPct).toBeCloseTo(expectedNormalPct, 0.01);
+    expect(1-normalPct).toBeCloseTo(expectedPolarizePct, 0.01);
+
     // Esperado: normal -11 / polar -44
-    expect(result.normalDeal).toBeCloseTo(-11, 0.01);
-    expect(result.automaticSale).toBeCloseTo(-44, 0.01);
+    expect(result.normalDeal).toBeCloseTo(-11.00, 0.01);
+    expect(result.automaticSale).toBeCloseTo(-44.00, 0.01);
   });
 
   test('Caso B: Phase Day 2 (buy-in 55, prize 113.44, re-entries 0, cap 11)', () => {
@@ -56,9 +63,16 @@ describe('Financial Logic Tests', () => {
 
     const result = calculateSingleTournamentDistribution(tournament, TEST_PLAYER_LEVEL);
 
-    // Esperado: normal 22.688 / polar 90.752
-    expect(result.normalDeal).toBeCloseTo(22.688, 0.01);
-    expect(result.automaticSale).toBeCloseTo(90.752, 0.01);
+    // Verifica percentagens
+    const expectedNormalPct = 0.2;  
+    const expectedPolarizePct = 0.8;
+    const normalPct = 1 - Math.max(0, (tournament.buyIn - TEST_PLAYER_LEVEL.phaseLimit) / tournament.buyIn);
+    expect(normalPct).toBeCloseTo(expectedNormalPct, 0.01);
+    expect(1-normalPct).toBeCloseTo(expectedPolarizePct, 0.01);
+
+    // Esperado: normal 22.69 / polar 90.75
+    expect(result.normalDeal).toBeCloseTo(22.69, 0.01);
+    expect(result.automaticSale).toBeCloseTo(90.75, 0.01);
   });
 
   test('Caso C: Normal bounty (buy-in 55, prize 18.75, re-entries 0, cap 22)', () => {
@@ -80,8 +94,15 @@ describe('Financial Logic Tests', () => {
 
     const result = calculateSingleTournamentDistribution(tournament, TEST_PLAYER_LEVEL);
 
-    // Esperado: normal -14.5 / polar -21.75
-    expect(result.normalDeal).toBeCloseTo(-14.5, 0.01);
+    // Verifica percentagens
+    const expectedNormalPct = 0.4;  // (55-22)/55 = 0.6 → 1-0.6 = 0.4
+    const expectedPolarizePct = 0.6;
+    const normalPct = 1 - Math.max(0, (tournament.buyIn - TEST_PLAYER_LEVEL.normalLimit) / tournament.buyIn);
+    expect(normalPct).toBeCloseTo(expectedNormalPct, 0.01);
+    expect(1-normalPct).toBeCloseTo(expectedPolarizePct, 0.01);
+
+    // Esperado: normal -14.50 / polar -21.75
+    expect(result.normalDeal).toBeCloseTo(-14.50, 0.01);
     expect(result.automaticSale).toBeCloseTo(-21.75, 0.01);
   });
 
@@ -104,11 +125,16 @@ describe('Financial Logic Tests', () => {
 
     const result = calculateSingleTournamentDistribution(tournament, TEST_PLAYER_LEVEL);
 
-    // Esperado: normal -47.3 / polar 0
-    // Cálculo: resultado (32.7) - totalBuyIn (80) = -47.3
-    // Como buy-in (20) < cap (22), 100% é normal deal
-    expect(result.normalDeal).toBeCloseTo(-47.3, 0.01);
-    expect(result.automaticSale).toBeCloseTo(0, 0.01);
+    // Verifica percentagens
+    const expectedNormalPct = 1.0;  // buy-in (20) < cap (22) → 100% normal deal
+    const expectedPolarizePct = 0.0;
+    const normalPct = 1 - Math.max(0, (tournament.buyIn - TEST_PLAYER_LEVEL.normalLimit) / tournament.buyIn);
+    expect(normalPct).toBeCloseTo(expectedNormalPct, 0.01);
+    expect(1-normalPct).toBeCloseTo(expectedPolarizePct, 0.01);
+
+    // Esperado: normal -47.30 / polar 0.00
+    expect(result.normalDeal).toBeCloseTo(-47.30, 0.01);
+    expect(result.automaticSale).toBeCloseTo(0.00, 0.01);
   });
 
   test('Caso E: Moeda diferente USD (buy-in ¥110, prize 302.9, re-entries 0, cap 22)', () => {
@@ -130,7 +156,8 @@ describe('Financial Logic Tests', () => {
 
     const result = calculateSingleTournamentDistribution(tournament, TEST_PLAYER_LEVEL);
 
-    // Esperado: conversão pendente, valores zerados
+    // Esperado: conversão pendente, flag marcada
+    expect(result.conversionPending).toBe(true);
     expect(result.normalDeal).toBe(0);
     expect(result.automaticSale).toBe(0);
   });
