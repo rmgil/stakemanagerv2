@@ -83,55 +83,49 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({
             <h3 className="text-lg leading-6 font-medium text-gray-900 mb-4">
               Distribuição por Categoria
             </h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <div className="flex items-center mb-2">
+            
+            {/* Listagem vertical simples em coluna */}
+            <dl className="flex flex-col space-y-3">
+              <div className="flex justify-between items-center" data-testid="category-count-phase-d1">
+                <dt className="flex items-center">
                   <div className="w-3 h-3 rounded-full bg-primary-500 mr-2"></div>
-                  <span className="text-sm text-gray-700">Phase Day 1</span>
-                </div>
-                <div className="flex items-center mb-2">
+                  <span className="text-sm text-gray-700">Phase Day 1:</span>
+                </dt>
+                <dd className="text-sm font-medium text-gray-900">
+                  {summary.categories.phaseDay1Count}
+                </dd>
+              </div>
+              
+              <div className="flex justify-between items-center" data-testid="category-count-phase-d2">
+                <dt className="flex items-center">
                   <div className="w-3 h-3 rounded-full bg-success-500 mr-2"></div>
-                  <span className="text-sm text-gray-700">Phase Day 2+</span>
-                </div>
+                  <span className="text-sm text-gray-700">Phase Day 2+:</span>
+                </dt>
+                <dd className="text-sm font-medium text-gray-900">
+                  {summary.categories.phaseDay2Count}
+                </dd>
               </div>
-              <div>
-                <div className="flex items-center mb-2">
+              
+              <div className="flex justify-between items-center" data-testid="category-count-other-currency">
+                <dt className="flex items-center">
                   <div className="w-3 h-3 rounded-full bg-warning-500 mr-2"></div>
-                  <span className="text-sm text-gray-700">Outras Moedas</span>
-                </div>
-                <div className="flex items-center mb-2">
-                  <div className="w-3 h-3 rounded-full bg-accent-500 mr-2"></div>
-                  <span className="text-sm text-gray-700">Outros Torneios</span>
-                </div>
+                  <span className="text-sm text-gray-700">Outras Moedas:</span>
+                </dt>
+                <dd className="text-sm font-medium text-gray-900">
+                  {summary.categories.otherCurrencyCount}
+                </dd>
               </div>
-            </div>
-            
-            {/* Simple chart representation */}
-            <div className="mt-4 h-8 bg-gray-200 rounded-full overflow-hidden flex">
-              <div 
-                className="h-full bg-primary-500" 
-                style={{ width: `${summary.categories.phaseDay1Percentage}%` }}
-              ></div>
-              <div 
-                className="h-full bg-success-500" 
-                style={{ width: `${summary.categories.phaseDay2Percentage}%` }}
-              ></div>
-              <div 
-                className="h-full bg-warning-500" 
-                style={{ width: `${summary.categories.otherCurrencyPercentage}%` }}
-              ></div>
-              <div 
-                className="h-full bg-accent-500" 
-                style={{ width: `${summary.categories.otherTournamentsPercentage}%` }}
-              ></div>
-            </div>
-            
-            <div className="grid grid-cols-4 gap-2 mt-2 text-xs text-center">
-              <div>{summary.categories.phaseDay1Count}</div>
-              <div>{summary.categories.phaseDay2Count}</div>
-              <div>{summary.categories.otherCurrencyCount}</div>
-              <div>{summary.categories.otherTournamentsCount}</div>
-            </div>
+              
+              <div className="flex justify-between items-center" data-testid="category-count-other">
+                <dt className="flex items-center">
+                  <div className="w-3 h-3 rounded-full bg-accent-500 mr-2"></div>
+                  <span className="text-sm text-gray-700">Outros Torneios:</span>
+                </dt>
+                <dd className="text-sm font-medium text-gray-900">
+                  {summary.categories.otherTournamentsCount}
+                </dd>
+              </div>
+            </dl>
           </div>
         </div>
       </div>
