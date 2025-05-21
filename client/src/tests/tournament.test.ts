@@ -10,7 +10,7 @@ import {
 import { 
   PlayerLevel, 
   TournamentCategory 
-} from '@shared/schema';
+} from '../../shared/schema';
 
 // Mock player level para testes
 const TEST_PLAYER_LEVEL: PlayerLevel = {
