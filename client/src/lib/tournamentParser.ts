@@ -38,6 +38,12 @@ export function parseTournamentSummary(fileContent: string, filename: string): T
       buyInValue = parseFloat(buyInMatch[2].replace(/,/g, ''));
     }
     
+    // Extract re-entries information
+    const reEntriesMatch = fileContent.match(/You made (\d+) re-entr[yi]es/);
+    const reEntries = reEntriesMatch ? parseInt(reEntriesMatch[1], 10) : 0;
+    const totalEntries = reEntries + 1;
+    const totalBuyIn = buyInValue * totalEntries;
+    
     // Extract result
     const resultMatch = fileContent.match(/(?:Won|Profit|Finished): ([A-Z]+|\$)?[\s]?([0-9,.]+)/);
     const resultLossMatch = fileContent.match(/(?:Lost): ([A-Z]+|\$)?[\s]?([0-9,.]+)/);
@@ -74,6 +80,9 @@ export function parseTournamentSummary(fileContent: string, filename: string): T
       category,
       buyIn: buyInValue,
       buyInOriginal: buyInOriginal || undefined,
+      reEntries,
+      totalEntries,
+      totalBuyIn,
       result,
       normalDeal,
       automaticSale,

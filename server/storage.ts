@@ -72,6 +72,9 @@ export class MemStorage implements IStorage {
       createdAt,
       tournamentId: tournament.tournamentId || null,
       buyInOriginal: tournament.buyInOriginal || null,
+      reEntries: tournament.reEntries || 0,
+      totalEntries: tournament.totalEntries || 1,
+      totalBuyIn: tournament.totalBuyIn || tournament.buyIn,
       currencyCode: tournament.currencyCode || 'USD',
       conversionRate: tournament.conversionRate || 1,
       originalFilename: tournament.originalFilename || null
