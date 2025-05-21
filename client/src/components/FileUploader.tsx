@@ -23,19 +23,161 @@ const FileUploader: React.FC<FileUploaderProps> = ({
 }) => {
   const [isDragActive, setIsDragActive] = useState(false);
   
-  const onDrop = useCallback((acceptedFiles: File[]) => {
+  const onDrop = useCallback(async (acceptedFiles: File[]) => {
     onAddFiles(acceptedFiles as FileWithPath[]);
   }, [onAddFiles]);
   
+  // Function to process directory entries and extract all .txt files
+  const getFilesFromDirectory = async (dataTransferItems: DataTransferItemList | DataTransferItem[]) => {
+    const getAllFileEntries = async (dataTransferItem: any): Promise<File[]> => {
+      const entry = dataTransferItem.webkitGetAsEntry?.();
+      if (!entry) return [];
+      
+      return new Promise(resolve => {
+        if (entry.isFile) {
+          (entry as FileSystemFileEntry).file(file => {
+            if (file.name.toLowerCase().endsWith('.txt')) {
+              resolve([file]);
+            } else {
+              resolve([]);
+            }
+          });
+        } else if (entry.isDirectory) {
+          const directoryReader = (entry as FileSystemDirectoryEntry).createReader();
+          const readEntries = (): Promise<File[]> => {
+            return new Promise(resolveEntries => {
+              directoryReader.readEntries(async (entries) => {
+                if (entries.length === 0) {
+                  resolveEntries([]);
+                } else {
+                  const files = await Promise.all(
+                    entries.map(entry => {
+                      if (entry.isFile) {
+                        return new Promise<File[]>(resolveFile => {
+                          (entry as FileSystemFileEntry).file(file => {
+                            if (file.name.toLowerCase().endsWith('.txt')) {
+                              resolveFile([file]);
+                            } else {
+                              resolveFile([]);
+                            }
+                          });
+                        });
+                      } else if (entry.isDirectory) {
+                        const dirReader = (entry as FileSystemDirectoryEntry).createReader();
+                        return new Promise<File[]>(resolveDir => {
+                          const readDirEntries = () => {
+                            dirReader.readEntries(async (dirEntries) => {
+                              if (dirEntries.length === 0) {
+                                resolveDir([]);
+                              } else {
+                                const nestedFiles = await Promise.all(
+                                  dirEntries.map(e => getAllFileEntries({ webkitGetAsEntry: () => e } as DataTransferItem))
+                                );
+                                resolveDir(nestedFiles.flat());
+                              }
+                            });
+                          };
+                          readDirEntries();
+                        });
+                      }
+                      return Promise.resolve([]);
+                    })
+                  );
+                  
+                  const moreFiles = await readEntries(); // Read next batch
+                  resolveEntries([...files.flat(), ...moreFiles]);
+                }
+              });
+            });
+          };
+          
+          readEntries().then(files => {
+            resolve(files);
+          });
+        } else {
+          resolve([]);
+        }
+      });
+    };
+    
+    const files = await Promise.all(
+      dataTransferItems.map(item => getAllFileEntries(item))
+    );
+    
+    return files.flat();
+  };
+  
+  const [uploadProgress, setUploadProgress] = useState({ total: 0, processed: 0 });
+  const [isProcessingFolder, setIsProcessingFolder] = useState(false);
+  
+  // Custom onDrop handler to handle directory uploads
+  const handleDrop = useCallback(async (acceptedFiles: File[], fileRejections: any, event: any) => {
+    // Regular file handling for simple cases
+    if (!event || !event.dataTransfer) {
+      onAddFiles(acceptedFiles as FileWithPath[]);
+      return;
+    }
+    
+    // Check if folders are being dropped
+    const items = event.dataTransfer.items;
+    if (items && items.length > 0) {
+      setIsProcessingFolder(true);
+      try {
+        // Check if any item is a directory
+        const hasDirectory = Array.from(items).some((item: any) => {
+          return item.webkitGetAsEntry && item.webkitGetAsEntry()?.isDirectory;
+        });
+        
+        if (hasDirectory) {
+          // Process directory contents
+          const allFiles = await getFilesFromDirectory(Array.from(items));
+          
+          // Update progress
+          setUploadProgress({ 
+            total: allFiles.length, 
+            processed: allFiles.length 
+          });
+          
+          console.log(`Processed ${allFiles.length} files from directory upload`);
+          
+          // Filter out non-txt files and add the valid ones
+          const validFiles = allFiles.filter(file => 
+            file.name.toLowerCase().endsWith('.txt')
+          );
+          
+          onAddFiles(validFiles as FileWithPath[]);
+        } else {
+          // Regular file upload - but make sure we only process .txt files
+          const validFiles = acceptedFiles.filter(file => 
+            file.name.toLowerCase().endsWith('.txt')
+          );
+          onAddFiles(validFiles as FileWithPath[]);
+        }
+      } catch (error) {
+        console.error('Error processing directory:', error);
+      } finally {
+        setIsProcessingFolder(false);
+      }
+    } else {
+      // Regular file upload fallback
+      onAddFiles(acceptedFiles as FileWithPath[]);
+    }
+  }, [onAddFiles]);
+  
+  // Configure dropzone
   const { getRootProps, getInputProps, isDragReject } = useDropzone({
-    onDrop,
+    onDrop: handleDrop,
     accept: {
       'text/plain': ['.txt']
     },
     onDragEnter: () => setIsDragActive(true),
     onDragLeave: () => setIsDragActive(false),
     onDropAccepted: () => setIsDragActive(false),
-    onDropRejected: () => setIsDragActive(false)
+    onDropRejected: () => setIsDragActive(false),
+    useFsAccessApi: false, // Disable File System Access API to ensure maximum compatibility
+    noClick: false,  // Allow clicking to open file dialog
+    noKeyboard: false,  // Allow keyboard navigation
+    noDrag: false  // Allow dragging files and folders
   });
   
   return (
@@ -63,7 +205,16 @@ const FileUploader: React.FC<FileUploaderProps> = ({
             'border-2 border-dashed border-gray-300'
           }`}
         >
-          <input {...getInputProps()} data-testid="file-input" />
+          <input 
+            {...getInputProps()} 
+            data-testid="file-input" 
+            // Adicionamos estes atributos como props para o DOM nativo, não via TypeScript
+            {...{
+              directory: '',
+              webkitdirectory: '',
+              mozdirectory: ''
+            }} 
+          />
           <svg 
             className="mx-auto h-12 w-12 text-gray-400"
             viewBox="0 0 24 24" 
@@ -77,8 +228,30 @@ const FileUploader: React.FC<FileUploaderProps> = ({
             <polyline points="17 8 12 3 7 8"></polyline>
             <line x1="12" y1="3" x2="12" y2="15"></line>
           </svg>
-          <p className="text-sm text-gray-500 mb-1">Arraste arquivos .txt ou clique para selecionar</p>
-          <p className="text-xs text-gray-400">Apenas arquivos de Tournament Summary do GGNetwork</p>
+          
+          {isProcessingFolder ? (
+            <>
+              <p className="text-sm text-blue-500 mb-1">Processando diretório...</p>
+              <div className="w-full bg-gray-200 rounded-full h-2.5 mb-2">
+                <div 
+                  className="bg-blue-600 h-2.5 rounded-full" 
+                  style={{ width: uploadProgress.total > 0 
+                    ? `${(uploadProgress.processed / uploadProgress.total) * 100}%` 
+                    : '0%' 
+                  }}
+                ></div>
+              </div>
+              <p className="text-xs text-gray-500">
+                {uploadProgress.processed} de {uploadProgress.total} arquivos processados
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-gray-500 mb-1">Arraste arquivos ou pastas ou clique para selecionar</p>
+              <p className="text-xs text-gray-400">Suporta múltiplos arquivos .txt ou pastas completas</p>
+              <p className="text-xs text-gray-400">Apenas arquivos de Tournament Summary do GGNetwork</p>
+            </>
+          )}
         </div>
         
         {/* Selected Files List */}

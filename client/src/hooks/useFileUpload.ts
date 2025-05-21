@@ -55,8 +55,21 @@ export function useFileUpload() {
     try {
       const filesToProcess = files.filter(f => !f.parsed);
       const results: TournamentResult[] = [];
+      const failedFiles: string[] = [];
+      const totalFiles = filesToProcess.length;
+      let processedCount = 0;
       
-      // First parse all files
+      // Verificar tamanho total dos arquivos (limite de 20MB)
+      const totalSize = filesToProcess.reduce((acc, file) => acc + file.file.size, 0);
+      const MAX_UPLOAD_SIZE = 20 * 1024 * 1024; // 20MB
+      
+      if (totalSize > MAX_UPLOAD_SIZE) {
+        setProcessingError(`Total de arquivos excede o limite de 20MB. Total atual: ${(totalSize / (1024 * 1024)).toFixed(2)}MB`);
+        setIsProcessing(false);
+        return;
+      }
+      
+      // First parse all files with batch progress tracking
       for (const fileData of filesToProcess) {
         try {
           fileData.status = 'uploading';
@@ -85,13 +98,17 @@ export function useFileUpload() {
           } else {
             fileData.status = 'error';
             fileData.error = 'Não foi possível reconhecer este arquivo como um resumo de torneio válido.';
+            failedFiles.push(fileData.name);
           }
         } catch (error) {
           fileData.status = 'error';
           fileData.error = error instanceof Error ? error.message : 'Erro ao processar arquivo';
+          failedFiles.push(fileData.name);
         }
         
-        // Update file status
+        // Update file status and progress counter
+        processedCount++;
+        console.log(`Processado ${processedCount}/${totalFiles} arquivos`);
         setFiles(prev => prev.map(f => f.id === fileData.id ? fileData : f));
       }
       
@@ -109,6 +126,15 @@ export function useFileUpload() {
           setParsedTournaments(data.tournaments);
           setSessionId(data.sessionId);
           setProcessingSuccess(true);
+          
+          // Se houve arquivos com falha, mostrar aviso parcial
+          if (failedFiles.length > 0) {
+            if (failedFiles.length <= 3) {
+              setProcessingError(`Alguns arquivos não puderam ser processados: ${failedFiles.join(', ')}`);
+            } else {
+              setProcessingError(`${failedFiles.length} arquivos não puderam ser processados. O resto foi analisado com sucesso.`);
+            }
+          }
         } else {
           const errorData = await response.json();
           setProcessingError(errorData.message || 'Erro ao processar no servidor');
