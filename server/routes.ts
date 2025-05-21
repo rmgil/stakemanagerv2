@@ -78,10 +78,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // 2. Analyze tournaments
   app.post("/api/tournaments/analyze", async (req: Request, res: Response) => {
     try {
-      // Validate request
+      // Validate request - permite processamento em lote de vários arquivos
       const reqBody = z.object({
         tournaments: z.array(tournamentResultSchema)
       }).parse(req.body);
+      
+      // Verificar limite de tamanho total (máximo 20MB)
+      const requestSize = JSON.stringify(req.body).length;
+      const MAX_REQUEST_SIZE = 20 * 1024 * 1024; // 20MB
+      
+      if (requestSize > MAX_REQUEST_SIZE) {
+        return res.status(413).json({ 
+          message: "Payload muito grande. O tamanho total excede o limite de 20MB." 
+        });
+      }
+      
+      // Registra o número de torneios recebidos
+      console.log(`Recebido(s) ${reqBody.tournaments.length} torneio(s) para análise`);
       
       // Get player level
       let playerLevel = DEFAULT_PLAYER_LEVEL;
@@ -120,32 +133,52 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Store the batch
       await storage.createUploadBatch(batchData);
       
-      // Store each tournament
+      // Store each tournament with error handling para processamento parcial
+      const failedTournaments: string[] = [];
+      
       for (const tournament of calculatedTournaments) {
-        const tournamentData: InsertTournament = {
-          userId: 1,
-          name: tournament.name,
-          category: tournament.category,
-          tournamentId: tournament.tournamentId,
-          buyIn: tournament.buyIn,
-          buyInOriginal: tournament.buyInOriginal,
-          result: tournament.result,
-          normalDeal: tournament.normalDeal,
-          automaticSale: tournament.automaticSale,
-          currencyCode: tournament.currencyCode,
-          conversionRate: tournament.conversionRate,
-          uploadBatchId: sessionId,
-          originalFilename: tournament.originalFilename
-        };
-        
-        await storage.createTournament(tournamentData);
+        try {
+          const tournamentData: InsertTournament = {
+            userId: 1,
+            name: tournament.name,
+            category: tournament.category,
+            tournamentId: tournament.tournamentId,
+            buyIn: tournament.buyIn,
+            buyInOriginal: tournament.buyInOriginal,
+            reEntries: tournament.reEntries || 0,
+            totalEntries: tournament.totalEntries || 1, 
+            totalBuyIn: tournament.totalBuyIn || tournament.buyIn,
+            result: tournament.result,
+            normalDeal: tournament.normalDeal,
+            automaticSale: tournament.automaticSale,
+            currencyCode: tournament.currencyCode,
+            conversionRate: tournament.conversionRate,
+            uploadBatchId: sessionId,
+            originalFilename: tournament.originalFilename
+          };
+          
+          await storage.createTournament(tournamentData);
+        } catch (error) {
+          console.error(`Falha ao salvar torneio ${tournament.tournamentId}:`, error);
+          failedTournaments.push(tournament.tournamentId);
+          // Continua processando outros torneios mesmo se houver falha em um
+        }
       }
       
-      res.json({
+      // Retorna os resultados com informações sobre erros parciais
+      const response = {
         tournaments: calculatedTournaments,
         summary,
-        sessionId
-      });
+        sessionId,
+        totalProcessed: calculatedTournaments.length,
+        failedTournaments: failedTournaments.length > 0 ? failedTournaments : undefined
+      };
+      
+      if (failedTournaments.length > 0) {
+        console.warn(`${failedTournaments.length} torneios falharam ao salvar`);
+      }
+      
+      res.json(response);
     } catch (error) {
       console.error("Error analyzing tournaments:", error);
       if (error instanceof z.ZodError) {

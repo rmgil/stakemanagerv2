@@ -28,83 +28,89 @@ const FileUploader: React.FC<FileUploaderProps> = ({
   }, [onAddFiles]);
   
   // Function to process directory entries and extract all .txt files
+  // Função auxiliar para extrair arquivos de diretórios usando a API do FileSystem
   const getFilesFromDirectory = async (dataTransferItems: DataTransferItemList | DataTransferItem[]) => {
-    const getAllFileEntries = async (dataTransferItem: any): Promise<File[]> => {
-      const entry = dataTransferItem.webkitGetAsEntry?.();
+    const items = Array.from(dataTransferItems as any);
+    
+    const getAllFileEntries = async (item: any): Promise<File[]> => {
+      // Tenta obter o FileSystemEntry do item
+      const entry = item.webkitGetAsEntry?.();
       if (!entry) return [];
       
       return new Promise(resolve => {
+        // Se for um arquivo, verifica se é .txt e retorna
         if (entry.isFile) {
-          (entry as FileSystemFileEntry).file(file => {
+          (entry as any).file((file: File) => {
             if (file.name.toLowerCase().endsWith('.txt')) {
               resolve([file]);
             } else {
               resolve([]);
             }
           });
-        } else if (entry.isDirectory) {
-          const directoryReader = (entry as FileSystemDirectoryEntry).createReader();
-          const readEntries = (): Promise<File[]> => {
-            return new Promise(resolveEntries => {
-              directoryReader.readEntries(async (entries) => {
-                if (entries.length === 0) {
-                  resolveEntries([]);
-                } else {
-                  const files = await Promise.all(
-                    entries.map(entry => {
-                      if (entry.isFile) {
-                        return new Promise<File[]>(resolveFile => {
-                          (entry as FileSystemFileEntry).file(file => {
-                            if (file.name.toLowerCase().endsWith('.txt')) {
-                              resolveFile([file]);
-                            } else {
-                              resolveFile([]);
-                            }
-                          });
-                        });
-                      } else if (entry.isDirectory) {
-                        const dirReader = (entry as FileSystemDirectoryEntry).createReader();
-                        return new Promise<File[]>(resolveDir => {
-                          const readDirEntries = () => {
-                            dirReader.readEntries(async (dirEntries) => {
-                              if (dirEntries.length === 0) {
-                                resolveDir([]);
-                              } else {
-                                const nestedFiles = await Promise.all(
-                                  dirEntries.map(e => getAllFileEntries({ webkitGetAsEntry: () => e } as DataTransferItem))
-                                );
-                                resolveDir(nestedFiles.flat());
-                              }
-                            });
-                          };
-                          readDirEntries();
-                        });
+        } 
+        // Se for um diretório, processa todos os itens dentro dele
+        else if (entry.isDirectory) {
+          const directoryReader = (entry as any).createReader();
+          let allFiles: File[] = [];
+          
+          // Função para ler entradas em lotes (a API do FileSystem retorna em batches)
+          const readAllEntries = () => {
+            directoryReader.readEntries(async (entries: any[]) => {
+              // Se não há mais entradas, finaliza
+              if (entries.length === 0) {
+                resolve(allFiles);
+                return;
+              }
+              
+              // Processa todas as entradas deste lote
+              const filePromises = entries.map(async (entryItem) => {
+                if (entryItem.isFile) {
+                  return new Promise<File[]>((resolveFile) => {
+                    (entryItem as any).file((file: File) => {
+                      if (file.name.toLowerCase().endsWith('.txt')) {
+                        resolveFile([file]);
+                      } else {
+                        resolveFile([]);
                       }
-                      return Promise.resolve([]);
-                    })
-                  );
-                  
-                  const moreFiles = await readEntries(); // Read next batch
-                  resolveEntries([...files.flat(), ...moreFiles]);
+                    });
+                  });
+                } else if (entryItem.isDirectory) {
+                  // Se for subdiretório, processa recursivamente
+                  const subFiles = await getAllFileEntries({ 
+                    webkitGetAsEntry: () => entryItem 
+                  });
+                  return subFiles;
                 }
+                return [];
               });
+              
+              // Aguarda que todos os arquivos deste lote sejam processados
+              const newFiles = await Promise.all(filePromises);
+              allFiles = [...allFiles, ...newFiles.flat()];
+              
+              // Continua para o próximo lote
+              readAllEntries();
             });
           };
           
-          readEntries().then(files => {
-            resolve(files);
-          });
+          // Inicia o processo de leitura
+          readAllEntries();
         } else {
+          // Nem arquivo nem diretório
           resolve([]);
         }
       });
     };
     
-    const files = await Promise.all(
-      dataTransferItems.map(item => getAllFileEntries(item))
+    // Processa todos os itens em paralelo
+    const fileArrays = await Promise.all(
+      items.map(item => getAllFileEntries(item))
     );
     
-    return files.flat();
+    // Concatena todos os arquivos encontrados em um único array
+    const allFiles = fileArrays.flat();
+    console.log(`Total de arquivos .txt encontrados: ${allFiles.length}`);
+    return allFiles;
   };
   
   const [uploadProgress, setUploadProgress] = useState({ total: 0, processed: 0 });
