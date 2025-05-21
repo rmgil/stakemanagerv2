@@ -1,0 +1,87 @@
+⚠️ **Bug-fix e ajustes de lógica financeira**
+
+Corrigir os cálculos de percentagens e lucros/perdas nos seguintes cenários:
+
+────────────────────────────────────────────
+1.  🔄  Percentagem Polarize vs. Deal Normal
+────────────────────────────────────────────
+Regra-geral (torneios normais):
+cap_normal = level.normal_cap_usd # ex.: 22 $
+polarize_pct = max(0, (buyin_usd - cap_normal) / buyin_usd)
+normal_pct = 1 - polarize_pct
+resultado = prize_usd - buyin_usd
+lucro_normal = resultado * normal_pct
+lucro_polar = resultado * polarize_pct
+
+markdown
+Copy
+Edit
+
+────────────────────────────────────────────
+2.  🟠  Phase Day 1
+────────────────────────────────────────────
+* **Sempre** trata o buy-in como prejuízo (resultado = -buyin_usd).  
+* Usa **cap_phase** do nível (ex.: 11 $) para calcular pct:
+cap_phase = level.phase_cap_usd
+polarize_pct = max(0, (buyin_usd - cap_phase) / buyin_usd)
+normal_pct = 1 - polarize_pct
+lucro_normal = (-buyin_usd) * normal_pct # ex.: -11
+lucro_polar = (-buyin_usd) * polarize_pct # ex.: -44
+
+markdown
+Copy
+Edit
+
+────────────────────────────────────────────
+3.  🟢  Phase Day 2 ou superior
+────────────────────────────────────────────
+* Buy-in lógico = 0 **para o resultado financeiro**  
+  (prize não é descontado).  
+* **Mas** o buy-in real continua a definir as percentagens:
+exemplo 55 $ buy-in, cap_phase=11 $
+polarize_pct = (55-11)/55 = 0.8
+normal_pct = 0.2
+resultado = prize_usd # sem deduzir buy-in
+lucro_normal = resultado * 0.2
+lucro_polar = resultado * 0.8
+
+markdown
+Copy
+Edit
+
+────────────────────────────────────────────
+4.  🔵  Re-entries
+────────────────────────────────────────────
+* Se aparecer “You made X re-entries”, gerar **X + 1 sub-entradas**:
+  - Cada sub-entrada herda o mesmo buy-in.  
+  - As primeiras X têm prize = 0.  
+  - A última recebe o prize do ficheiro.  
+* Processar **cada sub-entrada individualmente** pela regra do tipo
+  (normal ou Phase D1) e depois somar os resultados.  
+  > Ex.: Big 20 (20 $, 3 re-entries, nível 3.1) → 4 sub-entradas  
+  > • Cada buy-in = 20 $ (< 22 $) → 100 % deal normal  
+  > • Lucro total = 32.7 – 80 = -47.3 $ 100 % deal normal
+
+────────────────────────────────────────────
+5.  💱  Outras moedas
+────────────────────────────────────────────
+* Manter conversão pendente; se a taxa ainda não estiver definida,
+  marca `conversionPending = true` e retorna “N/A” no relatório.
+
+────────────────────────────────────────────
+6.  🧪  Testes
+────────────────────────────────────────────
+* Adicionar testes unitários que reproduzam EXACTAMENTE os casos abaixo:
+
+| Caso | Tipo | buy-in | prize | re-entries | cap | Esperado |
+|------|------|--------|-------|------------|-----|----------|
+| A | Phase D1 | 55 | 0 | 0 | 11 | normal -11 / polar -44 |
+| B | Phase D2 | 55 | 113.44 | 0 | 11 | normal 22.688 / polar 90.752 |
+| C | Normal bounty | 55 | 18.75 | 0 | 22 | normal -14.5 / polar -21.75 |
+| D | Normal re-entry | 20 | 32.7 | 3 | 22 | normal -47.3 / polar 0 |
+| E | Moeda ≠ USD | ¥110 | 302.9 | 0 | 22 | conversão pendente |
+
+(use assert ≈ 0.01 p/ flutuantes).
+
+────────────────────────────────────────────
+**Implementa SÓ estas alterações; UI e endpoints mantêm-se.**

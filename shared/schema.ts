@@ -81,9 +81,15 @@ export type UploadBatch = typeof uploadBatches.$inferSelect;
 export const playerLevelSchema = z.object({
   level: z.string(),
   levelProgress: z.number(),
-  levelProgressPercentage: z.number(),
-  normalLimit: z.number(),
-  phaseLimit: z.number(),
+  levelProgressFormatted: z.string().optional(),
+  levelProgressPercentage: z.number().optional(),
+  normalLimit: z.number(), // cap_normal para torneios regulares (em USD)
+  phaseLimit: z.number(),  // cap_phase para torneios Phase (em USD)
+  // Compatibilidade com implementação anterior para testes
+  maxTotalBuyin: z.number().optional(),
+  maxTournamentBuyin: z.number().optional(),
+  normalDealPercentage: z.number().optional(),
+  automaticSalePercentage: z.number().optional(),
 });
 
 export type PlayerLevel = z.infer<typeof playerLevelSchema>;
