@@ -44,14 +44,27 @@ const ResultsPanel: React.FC<ResultsPanelProps> = ({
               </div>
             </div>
             
-            {/* Novo campo para Balanço Final */}
+            {/* Novo campo para Balanço Final (prêmios - investimento) */}
             <div className="mt-4 border-t border-gray-200 pt-4">
-              <div className="flex justify-between text-sm mb-2">
-                <span className="text-gray-500">Balanço Final:</span>
-                <span className={`font-medium ${summary.netProfit >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                  ${summary.netProfit.toFixed(2)}
-                </span>
-              </div>
+              {/* Cálculo: total de prêmios (sum de result onde result > 0) - investimento total */}
+              {(() => {
+                const totalInvestimento = tournaments.reduce((total, t) => total + (t.totalBuyIn || t.buyIn), 0);
+                const totalPremios = tournaments.reduce((total, t) => {
+                  // Apenas considera os resultados positivos como prêmios
+                  return total + (t.result > 0 ? t.result : 0);
+                }, 0);
+                const balancoFinal = totalPremios - totalInvestimento;
+                
+                return (
+                  <div className="flex justify-between text-sm mb-2">
+                    <span className="text-gray-500">Balanço Final:</span>
+                    <span className={`font-medium ${balancoFinal >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                      ${balancoFinal.toFixed(2)}
+                    </span>
+                  </div>
+                );
+              })()}
+              
               <div className="flex justify-between text-sm mb-2">
                 <span className="text-gray-500">Deal Normal (50/50):</span>
                 <span className="font-medium text-gray-900">${summary.normalDeal.toFixed(2)}</span>
